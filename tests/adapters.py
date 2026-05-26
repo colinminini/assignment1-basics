@@ -561,6 +561,7 @@ def get_tokenizer(
     """
     raise NotImplementedError
 
+from cs336_basics import BPE_tokenizer as BPE_tokenizer
 
 def run_train_bpe(
     input_path: str | os.PathLike,
@@ -589,4 +590,10 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    raise NotImplementedError
+    BPE = BPE_tokenizer.BPE()
+    return BPE.train_bpe(input_path, vocab_size, special_tokens)
+
+if __name__ == '__main__':
+    vocab, merges = run_train_bpe('./data/TinyStoriesV2-GPT4-valid.txt', vocab_size=500, special_tokens=['<|endoftext|>', '<|startoftext|>'])
+    print(vocab)
+    print(len(merges))
