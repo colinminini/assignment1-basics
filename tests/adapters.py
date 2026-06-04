@@ -8,6 +8,8 @@ import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
+import torch.nn as nn
+from einops import einsum
 
 
 def run_linear(
@@ -28,8 +30,26 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
+# ALl neural nets modules should inherent from nn.Module parent class -> inherits convenient methods such as: load_state_dict(), to(), get_parameters(), cpu(), cuda(), children(), bfloat16()...
 
-    raise NotImplementedError
+# Implement a Linear Class (= "a Linear Module")
+# y = xWT
+
+    class Linear(nn.Module): # Inherits nn.Module methods()
+        def __init__(self, in_features, out_features, device=None, dtype=None):
+            super().__init__()
+            
+            self.sigma = (2 / (in_features + out_features)) ** (1/2)
+
+            self.W = nn.Parameter(nn.init.trunc_normal_(torch.empty(out_features, in_features, dtype=dtype, device=device), 
+                                                                    mean=0, std = self.sigma, 
+                                                                    a = -3 * self.sigma, b= 3 * self.sigma ))
+
+        def forward(self, x: torch.tensor) -> torch.Tensor: # All nn.Module need to have a forward() method
+            return einsum(x, self.W, '... in_feature , out_feature in_feature -> ... out_feature')
+    ll = Linear(d_in, d_out)
+    ll.load_state_dict({"W": weights})
+    return ll(in_features)
 
 
 def run_embedding(
