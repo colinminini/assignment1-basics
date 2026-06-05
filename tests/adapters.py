@@ -9,7 +9,7 @@ import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 import torch.nn as nn
-from einops import einsum
+from einops import einsum, reduce, rearrange
 
 
 def run_linear(
@@ -414,7 +414,24 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    class RMSNorm(nn.Module):
+
+        def __init__(self, d_model, eps=1e-5, dtype=None, device=None):
+            super().__init__()
+            self.weights = nn.Parameter(torch.ones(d_model, dtype=dtype)) # (d_model)
+            self.eps = eps
+
+        def forward(self, x): # (b T d_model -> b T d_model)
+            in_dtype = x.dtype
+            x = x.to(dtype = torch.float32)
+            batched_rms = torch.sqrt(reduce(torch.square(x), '... d_model -> ... 1', reduction = 'mean') + self.eps)
+            x_norm = torch.div(x, batched_rms)
+            result = einsum(x_norm, self.weights, '... d_model, d_model -> ... d_model')
+            return result.to(dtype=in_dtype)
+
+    LayerNorm = RMSNorm(d_model=d_model, eps=eps)
+    LayerNorm.load_state_dict({'weights': weights})
+    return LayerNorm(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
