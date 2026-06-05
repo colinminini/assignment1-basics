@@ -7,9 +7,7 @@ from typing import IO, Any, BinaryIO
 import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
-from torch import Tensor
-import torch.nn as nn
-from einops import einsum, reduce, rearrange
+from cs336_basics import NeuralNets
 
 
 def run_linear(
@@ -30,25 +28,7 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
-# ALl neural nets modules should inherent from nn.Module parent class -> inherits convenient methods such as: load_state_dict(), to(), get_parameters(), cpu(), cuda(), children(), bfloat16()...
-
-# Implement a Linear Class (= "a Linear Module")
-# y = xWT
-
-    class Linear(nn.Module): # Inherits nn.Module methods()
-        def __init__(self, in_features, out_features, device=None, dtype=None):
-            super().__init__()
-            
-            self.sigma = (2 / (in_features + out_features)) ** (1/2)
-
-            self.W = nn.Parameter(nn.init.trunc_normal_(torch.empty(out_features, in_features, dtype=dtype, device=device), 
-                                                                    mean=0, std = self.sigma, 
-                                                                    a = -3 * self.sigma, b= 3 * self.sigma ))
-
-        def forward(self, x: torch.tensor) -> torch.Tensor: # All nn.Module need to have a forward() method
-            return einsum(x, self.W, '... in_feature , out_feature in_feature -> ... out_feature')
-
-    ll = Linear(d_in, d_out)
+    ll = NeuralNets.Linear(d_in, d_out)
     ll.load_state_dict({"W": weights})
     
     return ll(in_features)
@@ -72,19 +52,7 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-    # Create an embedding table Class
-    # Ounce again, every neural nets module should inherent nn.Module for convenient access to parent methods (.load_state_dict(), .Parameters(), .to()...)
-
-    class Embedding(nn.Module):
-
-        def __init__(self, num_embeddings, embedding_dim, dtype=None, device=None):
-            super().__init__()
-            self.weights = nn.Parameter(nn.init.trunc_normal_(torch.empty(num_embeddings, embedding_dim, dtype=dtype, device=device), std=1, a=-3, b=3))
-
-        def forward(self, x: torch.LongTensor) -> torch.Tensor: # (... T) -> (... T d_model)
-            return self.weights[x] # shape: = x.shape + self.weights.shape[1:]
-
-    Table = Embedding(vocab_size, d_model)
+    Table = NeuralNets.Embedding(vocab_size, d_model)
     Table.load_state_dict({'weights': weights})
 
     return Table(token_ids)
@@ -414,22 +382,7 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    class RMSNorm(nn.Module):
-
-        def __init__(self, d_model, eps=1e-5, dtype=None, device=None):
-            super().__init__()
-            self.weights = nn.Parameter(torch.ones(d_model, dtype=dtype)) # (d_model)
-            self.eps = eps
-
-        def forward(self, x): # (b T d_model -> b T d_model)
-            in_dtype = x.dtype
-            x = x.to(dtype = torch.float32)
-            batched_rms = torch.sqrt(reduce(torch.square(x), '... d_model -> ... 1', reduction = 'mean') + self.eps)
-            x_norm = torch.div(x, batched_rms)
-            result = einsum(x_norm, self.weights, '... d_model, d_model -> ... d_model')
-            return result.to(dtype=in_dtype)
-
-    LayerNorm = RMSNorm(d_model=d_model, eps=eps)
+    LayerNorm = NeuralNets.RMSNorm(d_model=d_model, eps=eps)
     LayerNorm.load_state_dict({'weights': weights})
     return LayerNorm(in_features)
 

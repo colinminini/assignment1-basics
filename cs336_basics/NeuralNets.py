@@ -1,0 +1,52 @@
+import torch
+from einops import rearrange, einsum, reduce
+from torch import nn
+
+# ALl neural nets modules should inherent from nn.Module parent class -> inherits convenient methods such as: load_state_dict(), to(), get_parameters(), cpu(), cuda(), children(), bfloat16()...
+
+# Implement a Linear Class (= "a Linear Module")
+# y = xWT
+
+class Linear(nn.Module): # Inherits nn.Module methods()
+    def __init__(self, in_features, out_features, device=None, dtype=None):
+        super().__init__()
+        
+        self.sigma = (2 / (in_features + out_features)) ** (1/2)
+
+        self.W = nn.Parameter(nn.init.trunc_normal_(torch.empty(out_features, in_features, dtype=dtype, device=device), 
+                                                                mean=0, std = self.sigma, 
+                                                                a = -3 * self.sigma, b= 3 * self.sigma ))
+
+    def forward(self, x: torch.tensor) -> torch.Tensor: # All nn.Module need to have a forward() method
+        return einsum(x, self.W, '... in_feature , out_feature in_feature -> ... out_feature')
+
+# Create an embedding table Class
+# Ounce again, every neural nets module should inherent nn.Module for convenient access to parent methods (.load_state_dict(), .Parameters(), .to()...)
+
+class Embedding(nn.Module):
+
+    def __init__(self, num_embeddings, embedding_dim, dtype=None, device=None):
+        super().__init__()
+        self.weights = nn.Parameter(nn.init.trunc_normal_(torch.empty(num_embeddings, embedding_dim, dtype=dtype, device=device), std=1, a=-3, b=3))
+
+    def forward(self, x: torch.LongTensor) -> torch.Tensor: # (... T) -> (... T d_model)
+        return self.weights[x] # shape: = x.shape + self.weights.shape[1:]
+
+# Implement LayerNorm: RMSNorm
+# Dtype: Prevent overflow of root mean square by using dtype = float32. 
+# It is possible to change data type in this way: input_dtype -> float32 -> input_dtype
+
+class RMSNorm(nn.Module):
+
+    def __init__(self, d_model, eps=1e-5, dtype=None, device=None):
+        super().__init__()
+        self.weights = nn.Parameter(torch.ones(d_model, dtype=dtype)) # (d_model)
+        self.eps = eps
+
+    def forward(self, x): # (b T d_model -> b T d_model)
+        in_dtype = x.dtype
+        x = x.to(dtype = torch.float32)
+        batched_rms = torch.sqrt(reduce(torch.square(x), '... d_model -> ... 1', reduction = 'mean') + self.eps)
+        x_norm = torch.div(x, batched_rms)
+        result = einsum(x_norm, self.weights, '... d_model, d_model -> ... d_model')
+        return result.to(dtype=in_dtype)
