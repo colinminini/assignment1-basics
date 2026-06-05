@@ -47,8 +47,10 @@ def run_linear(
 
         def forward(self, x: torch.tensor) -> torch.Tensor: # All nn.Module need to have a forward() method
             return einsum(x, self.W, '... in_feature , out_feature in_feature -> ... out_feature')
+
     ll = Linear(d_in, d_out)
     ll.load_state_dict({"W": weights})
+    
     return ll(in_features)
 
 
@@ -70,8 +72,22 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
+    # Create an embedding table Class
+    # Ounce again, every neural nets module should inherent nn.Module for convenient access to parent methods (.load_state_dict(), .Parameters(), .to()...)
 
-    raise NotImplementedError
+    class Embedding(nn.Module):
+
+        def __init__(self, num_embeddings, embedding_dim, dtype=None, device=None):
+            super().__init__()
+            self.weights = nn.Parameter(nn.init.trunc_normal_(torch.empty(num_embeddings, embedding_dim, dtype=dtype, device=device), std=1, a=-3, b=3))
+
+        def forward(self, x: torch.LongTensor) -> torch.Tensor: # (... T) -> (... T d_model)
+            return self.weights[x] # shape: = x.shape + self.weights.shape[1:]
+
+    Table = Embedding(vocab_size, d_model)
+    Table.load_state_dict({'weights': weights})
+
+    return Table(token_ids)
 
 
 def run_swiglu(
