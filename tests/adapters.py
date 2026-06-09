@@ -87,7 +87,11 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    weights = {'w1_weight.W': w1_weight, 'w2_weight.W': w2_weight, 'w3_weight.W': w3_weight}
+    swiglu = NeuralNets.SwiGLU_FFN(d_model=d_model)
+    swiglu.d_ff = d_ff
+    swiglu.load_state_dict(weights)
+    return swiglu(in_features)
 
 
 def run_scaled_dot_product_attention(

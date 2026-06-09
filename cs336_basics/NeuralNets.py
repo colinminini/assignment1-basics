@@ -50,3 +50,25 @@ class RMSNorm(nn.Module):
         x_norm = torch.div(x, batched_rms)
         result = einsum(x_norm, self.weights, '... d_model, d_model -> ... d_model')
         return result.to(dtype=in_dtype)
+
+# FFN Transformer Layer
+# Swish activation function + Gated Linear Unit: W1 & W2, thus d_ffn becomes 2/3 what it would be without gated linear unit to keep same parameter count
+# d_model -> d_ffn -> d_model. One single hidden layer. d_ffn = 8/3 * d_model (should be a multiplier of 64 for hardware efficiency)
+# The module should - as always - inherent from PyTorch nn.Module parent class for convenient methods usage (.to(), .load_state_dict(), .parameters())
+# Weights should be defined inside nn.Parameter() inside the child module for compatibility with Torch other parameter related methods (e.g. .parameters())
+
+class SwiGLU_FFN(nn.Module):
+    
+    def __init__(self, d_model, dtype=None, device=None):
+        super().__init__()
+        self.d_ff = int(((8/3) * d_model // 64) * 64)  # Kepping same parameter count with/without Gated Linear Unit
+        self.w1_weight = Linear(in_features=d_model, out_features=self.d_ff, dtype=dtype, device=device)
+        self.w2_weight = Linear(in_features=self.d_ff, out_features=d_model, dtype=dtype, device=device)
+        self.w3_weight = Linear(in_features=d_model, out_features=self.d_ff, dtype=dtype, device=device)
+
+    def forward(self, x): # x.shape == ([B T d_model])
+        x_1 = self.w1_weight(x) # ... d_model -> ... d_ff
+        GLU = self.w3_weight(x)
+        SiLU = einsum(x_1, torch.sigmoid(x_1), '... d_ff, ... d_ff -> ... d_ff')
+        SwiGLU = einsum(SiLU, GLU, '... d_ff, ... d_ff -> ... d_ff')
+        return self.w2_weight(SwiGLU)
