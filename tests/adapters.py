@@ -29,7 +29,7 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
     ll = NeuralNets.Linear(d_in, d_out)
-    ll.load_state_dict({"W": weights})
+    ll.load_state_dict({"weight": weights})
     
     return ll(in_features)
 
@@ -53,7 +53,7 @@ def run_embedding(
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
     Table = NeuralNets.Embedding(vocab_size, d_model)
-    Table.load_state_dict({'weights': weights})
+    Table.load_state_dict({'weight': weights})
 
     return Table(token_ids)
 
@@ -87,7 +87,7 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    weights = {'w1_weight.W': w1_weight, 'w2_weight.W': w2_weight, 'w3_weight.W': w3_weight}
+    weights = {'w1.weight': w1_weight, 'w2.weight': w2_weight, 'w3.weight': w3_weight}
     swiglu = NeuralNets.SwiGLU_FFN(d_model=d_model)
     swiglu.d_ff = d_ff
     swiglu.load_state_dict(weights)
@@ -387,7 +387,7 @@ def run_rmsnorm(
         RMSNorm of the `in_features`.
     """
     LayerNorm = NeuralNets.RMSNorm(d_model=d_model, eps=eps)
-    LayerNorm.load_state_dict({'weights': weights})
+    LayerNorm.load_state_dict({'weight': weights})
     return LayerNorm(in_features)
 
 
