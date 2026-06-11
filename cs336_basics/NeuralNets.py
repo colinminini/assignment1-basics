@@ -94,3 +94,13 @@ class RoPE(nn.Module):
         x_paired = rearrange(x, '... T (d1 d2) -> ... T d1 d2', d2=2)
         output_paired = einsum(sequence_rope, x_paired, '... T dk2 l c, ... T dk2 c -> ... T dk2 l')
         return rearrange(output_paired, '... T dk2 l -> ... T (dk2 l)')
+
+def Softmax(x: torch.Tensor, i: int):
+    
+    x_copy = torch.transpose(x, i, -1) # (... i)
+    x_minus_max = reduce(x_copy, '... i -> ... 1', reduction='max')
+    x_copy = x_copy - x_minus_max # Stability trick to avoidd exp(vi) to become inf and then having inf/inf = NaN
+    x_copy = torch.exp(x_copy)
+    x_div = reduce(x_copy, '... i -> ... 1', reduction='sum')
+    probs = torch.div(x_copy, x_div)
+    return torch.transpose(probs, i, -1)
