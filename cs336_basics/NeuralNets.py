@@ -72,3 +72,25 @@ class SwiGLU_FFN(nn.Module):
         SiLU = einsum(x_1, torch.sigmoid(x_1), '... d_ff, ... d_ff -> ... d_ff')
         SwiGLU = einsum(SiLU, GLU, '... d_ff, ... d_ff -> ... d_ff')
         return self.w2(SwiGLU)
+    
+# Relative Positional Embedding (RoPE)
+# From (nn.Module). Uses buffer for the rotation angles with 'self.register_buffer()'
+# Different dimensions of the latent space get different rotation speed. Rotation itself depends on the position of the token in the sequence.
+# In the Latent Space, delta of angle between vectors is linearly proportional to the distance of their index in the sequence
+
+class RoPE(nn.Module):
+    # Create a ([T, d_k, d_k]) tensor of the rotation matrices is suboptimal
+    # Create a ([T, d_k/2, 2, 2]) tensor of rotation matrices, rearrange x to become (... d_k/2 2) then MatMul then back to (... d_k)
+    def __init__(self, theta: int, d_k: int, max_sequence_len: int, device=None):
+        super().__init__()
+        self.thetas_dim = theta ** (-torch.arange(0, d_k, step=2, device=device) / d_k)
+        self.thetas_sequence = einsum(torch.arange(0, max_sequence_len, device=device), self.thetas_dim, 'maxT, d2 -> maxT d2')
+        self.stack = torch.stack([torch.cos(self.thetas_sequence), -torch.sin(self.thetas_sequence), 
+                                torch.sin(self.thetas_sequence), torch.cos(self.thetas_sequence)]) # (4, maxT, d_k/2)
+        self.register_buffer('RoPE', rearrange(self.stack, ' (l c) maxT d2 -> maxT d2 l c', l=2, c=2), persistent=False)
+    
+    def forward(self, x, token_positions): # x size: (... T d_k) / token_positions size: (... T)
+        sequence_rope = self.RoPE[token_positions] # (... T d2 l c)
+        x_paired = rearrange(x, '... T (d1 d2) -> ... T d1 d2', d2=2)
+        output_paired = einsum(sequence_rope, x_paired, '... T dk2 l c, ... T dk2 c -> ... T dk2 l')
+        return rearrange(output_paired, '... T dk2 l -> ... T (dk2 l)')
