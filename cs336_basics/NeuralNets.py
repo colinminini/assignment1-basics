@@ -95,12 +95,25 @@ class RoPE(nn.Module):
         output_paired = einsum(sequence_rope, x_paired, '... T dk2 l c, ... T dk2 c -> ... T dk2 l')
         return rearrange(output_paired, '... T dk2 l -> ... T (dk2 l)')
 
-def Softmax(x: torch.Tensor, i: int):
-    
-    x_copy = torch.transpose(x, i, -1) # (... i)
+def Softmax(x: torch.Tensor, dim: int):
+    x_copy = torch.transpose(x, dim, -1) # (... i)
     x_minus_max = reduce(x_copy, '... i -> ... 1', reduction='max')
     x_copy = x_copy - x_minus_max # Stability trick to avoidd exp(vi) to become inf and then having inf/inf = NaN
     x_copy = torch.exp(x_copy)
     x_div = reduce(x_copy, '... i -> ... 1', reduction='sum')
     probs = torch.div(x_copy, x_div)
-    return torch.transpose(probs, i, -1)
+    return torch.transpose(probs, dim, -1)
+
+def scaled_dot_product_attention(Q, K, V, mask=True):
+    T1 = Q.shape[-2]
+    T2 = K.shape[-2]
+    true_mask = torch.ones(T1,T2, dtype=torch.bool)
+    mask_copy = mask * true_mask
+    mask_matrix = torch.zeros_like(mask_copy, dtype=torch.float)
+    mask_matrix[~mask_copy] = float('-inf')
+    d_k = K.shape[-1]
+    logits_scores = torch.div(einsum(Q, K, '... T1 d_k, ... T2 d_k -> ... T1 T2'), ( d_k ** (1/2) ))
+    mask_matrix = mask_matrix.to(device=Q.device)
+    logits_scores += mask_matrix
+    scores = Softmax(logits_scores, dim=-1)
+    return einsum(scores, V, '... T1 T2, ... T2 d_v -> ... T1 d_v')

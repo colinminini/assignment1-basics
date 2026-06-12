@@ -8,6 +8,7 @@ import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
 from cs336_basics import NeuralNets
+from cs336_basics import BPE_tokenizer
 
 
 def run_linear(
@@ -112,7 +113,7 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    return NeuralNets.scaled_dot_product_attention(Q=Q, K=K, V=V, mask=mask)
 
 
 def run_multihead_self_attention(
@@ -571,8 +572,6 @@ def get_tokenizer(
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
     raise NotImplementedError
-
-from cs336_basics import BPE_tokenizer as BPE_tokenizer
 
 def run_train_bpe(
     input_path: str | os.PathLike,
