@@ -1,5 +1,5 @@
 import torch
-from einops import rearrange, einsum, reduce
+from einops import rearrange, einsum, reduce, repeat
 from torch import nn
 
 # ALl neural nets modules should inherent from nn.Module parent class -> inherits convenient methods such as: load_state_dict(), to(), get_parameters(), cpu(), cuda(), children(), bfloat16()...
@@ -117,3 +117,32 @@ def scaled_dot_product_attention(Q, K, V, mask=True):
     logits_scores += mask_matrix
     scores = Softmax(logits_scores, dim=-1)
     return einsum(scores, V, '... T1 T2, ... T2 d_v -> ... T1 d_v')
+
+# Causal Multi Head Self Attention Module inherits from parent torch class nn.Module for methods like state_dict(), buffers(), to()...
+# Three Linear Layer Matrices of learnable weights (no biases): WQ, WK, WV
+# max_sequence_length should be T
+# token_positions should be torch.arange(x.shape[1], device=x.device)
+
+class causal_multihead_self_attention_with_rope(nn.Module):
+
+    def __init__(self, d_model: int, num_heads: int, max_sequence_length:int, rope_theta=10000, device=None, dtype=None):
+        super().__init__()
+        assert d_model % num_heads == 0, 'd_model must be divided by num_heads'
+        self.d_k = d_model // num_heads
+        self.num_heads = num_heads
+        self.w_q = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.w_k = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.w_v = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.w_o = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.rope = RoPE(theta=rope_theta, d_k=self.d_k, max_sequence_len=max_sequence_length, device=device)
+        mask = torch.tril(torch.ones(max_sequence_length, max_sequence_length, dtype=torch.bool, device=device))
+        self.register_buffer('mask', mask, persistent=False)
+    
+    def forward(self, x, token_positions=None): # (B T d_model)
+        if token_positions is None:
+            token_positions = torch.arange(x.shape[1], device=x.device)
+        T = x.shape[1]
+        Q, K, V = rearrange(self.w_q(x), '... T (nh dk) -> ... nh T dk', nh=self.num_heads), rearrange(self.w_k(x), '... T (nh dk) -> ... nh T dk', nh=self.num_heads), rearrange(self.w_v(x), '... T (nh dk) -> ... nh T dk', nh=self.num_heads) # (B num_h T d_k)
+        Q, K = self.rope(Q, token_positions=token_positions), self.rope(K, token_positions=token_positions)
+        output = scaled_dot_product_attention(Q, K, V, mask=self.mask[:T,:T]) # (B n_h T d_k)
+        return self.w_o(rearrange(output, '... nh T dk -> ... T (nh dk)', nh=self.num_heads))

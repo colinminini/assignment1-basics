@@ -187,7 +187,10 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    Attention_Layer = NeuralNets.causal_multihead_self_attention_with_rope(d_model=d_model, num_heads=num_heads, max_sequence_length=max_seq_len)
+    weights = {'w_q.weight': q_proj_weight, 'w_k.weight': k_proj_weight, 'w_v.weight': v_proj_weight, 'w_o.weight': o_proj_weight}
+    Attention_Layer.load_state_dict(weights)
+    return Attention_Layer(in_features, token_positions)
 
 
 def run_rope(
