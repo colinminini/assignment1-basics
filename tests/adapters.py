@@ -286,7 +286,9 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    Transformer_Block = NeuralNets.Transformer_Block(d_model=d_model, d_ff=d_ff, num_heads=num_heads, max_sequence_len=max_seq_len, theta=theta)
+    Transformer_Block.load_state_dict(weights)
+    return Transformer_Block(in_features)
 
 
 def run_transformer_lm(

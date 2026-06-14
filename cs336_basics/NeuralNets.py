@@ -40,7 +40,7 @@ class RMSNorm(nn.Module):
 
     def __init__(self, d_model, eps=1e-5, dtype=None, device=None):
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(d_model, dtype=dtype)) # (d_model)
+        self.weight = nn.Parameter(torch.ones(d_model, dtype=dtype, device=device)) # (d_model)
         self.eps = eps
 
     def forward(self, x): # (b T d_model -> b T d_model)
@@ -59,9 +59,11 @@ class RMSNorm(nn.Module):
 
 class SwiGLU_FFN(nn.Module):
     
-    def __init__(self, d_model, dtype=None, device=None):
+    def __init__(self, d_model, d_ff=None, dtype=None, device=None):
         super().__init__()
-        self.d_ff = int(((8/3) * d_model // 64) * 64)  # Kepping same parameter count with/without Gated Linear Unit
+        self.d_ff = d_ff
+        if not self.d_ff:
+            self.d_ff = int(((8/3) * d_model // 64) * 64)  # Kepping same parameter count with/without Gated Linear Unit
         self.w1 = Linear(in_features=d_model, out_features=self.d_ff, dtype=dtype, device=device)
         self.w2 = Linear(in_features=self.d_ff, out_features=d_model, dtype=dtype, device=device)
         self.w3 = Linear(in_features=d_model, out_features=self.d_ff, dtype=dtype, device=device)
@@ -81,10 +83,10 @@ class SwiGLU_FFN(nn.Module):
 class RoPE(nn.Module):
     # Create a ([T, d_k, d_k]) tensor of the rotation matrices is suboptimal
     # Create a ([T, d_k/2, 2, 2]) tensor of rotation matrices, rearrange x to become (... d_k/2 2) then MatMul then back to (... d_k)
-    def __init__(self, theta: int, d_k: int, max_sequence_len: int, device=None):
+    def __init__(self, theta: int, d_k: int, max_sequence_len: int, device=None, dtype=None):
         super().__init__()
-        self.thetas_dim = theta ** (-torch.arange(0, d_k, step=2, device=device) / d_k)
-        self.thetas_sequence = einsum(torch.arange(0, max_sequence_len, device=device), self.thetas_dim, 'maxT, d2 -> maxT d2')
+        self.thetas_dim = theta ** (-torch.arange(0, d_k, step=2, device=device, dtype=dtype) / d_k)
+        self.thetas_sequence = einsum(torch.arange(0, max_sequence_len, device=device, dtype=dtype), self.thetas_dim, 'maxT, d2 -> maxT d2')
         self.stack = torch.stack([torch.cos(self.thetas_sequence), -torch.sin(self.thetas_sequence), 
                                 torch.sin(self.thetas_sequence), torch.cos(self.thetas_sequence)]) # (4, maxT, d_k/2)
         self.register_buffer('RoPE', rearrange(self.stack, ' (l c) maxT d2 -> maxT d2 l c', l=2, c=2), persistent=False)
@@ -107,9 +109,9 @@ def Softmax(x: torch.Tensor, dim: int):
 def scaled_dot_product_attention(Q, K, V, mask=True):
     T1 = Q.shape[-2]
     T2 = K.shape[-2]
-    true_mask = torch.ones(T1,T2, dtype=torch.bool)
+    true_mask = torch.ones(T1,T2, dtype=torch.bool, device=mask.device)
     mask_copy = mask * true_mask
-    mask_matrix = torch.zeros_like(mask_copy, dtype=torch.float)
+    mask_matrix = torch.zeros_like(mask_copy, dtype=torch.float, device=mask.device)
     mask_matrix[~mask_copy] = float('-inf')
     d_k = K.shape[-1]
     logits_scores = torch.div(einsum(Q, K, '... T1 d_k, ... T2 d_k -> ... T1 T2'), ( d_k ** (1/2) ))
@@ -130,10 +132,10 @@ class causal_multihead_self_attention_with_rope(nn.Module):
         assert d_model % num_heads == 0, 'd_model must be divided by num_heads'
         self.d_k = d_model // num_heads
         self.num_heads = num_heads
-        self.w_q = Linear(d_model, d_model, device=device, dtype=dtype)
-        self.w_k = Linear(d_model, d_model, device=device, dtype=dtype)
-        self.w_v = Linear(d_model, d_model, device=device, dtype=dtype)
-        self.w_o = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.q_proj = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.k_proj = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.v_proj = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.output_proj = Linear(d_model, d_model, device=device, dtype=dtype)
         self.rope = RoPE(theta=rope_theta, d_k=self.d_k, max_sequence_len=max_sequence_length, device=device)
         mask = torch.tril(torch.ones(max_sequence_length, max_sequence_length, dtype=torch.bool, device=device))
         self.register_buffer('mask', mask, persistent=False)
@@ -142,7 +144,23 @@ class causal_multihead_self_attention_with_rope(nn.Module):
         if token_positions is None:
             token_positions = torch.arange(x.shape[1], device=x.device)
         T = x.shape[1]
-        Q, K, V = rearrange(self.w_q(x), '... T (nh dk) -> ... nh T dk', nh=self.num_heads), rearrange(self.w_k(x), '... T (nh dk) -> ... nh T dk', nh=self.num_heads), rearrange(self.w_v(x), '... T (nh dk) -> ... nh T dk', nh=self.num_heads) # (B num_h T d_k)
+        Q, K, V = rearrange(self.q_proj(x), '... T (nh dk) -> ... nh T dk', nh=self.num_heads), rearrange(self.k_proj(x), '... T (nh dk) -> ... nh T dk', nh=self.num_heads), rearrange(self.v_proj(x), '... T (nh dk) -> ... nh T dk', nh=self.num_heads) # (B num_h T d_k)
         Q, K = self.rope(Q, token_positions=token_positions), self.rope(K, token_positions=token_positions)
         output = scaled_dot_product_attention(Q, K, V, mask=self.mask[:T,:T]) # (B n_h T d_k)
-        return self.w_o(rearrange(output, '... nh T dk -> ... T (nh dk)', nh=self.num_heads))
+        return self.output_proj(rearrange(output, '... nh T dk -> ... T (nh dk)', nh=self.num_heads))
+
+# Transformer Block
+
+class Transformer_Block(nn.Module):
+
+    def __init__(self, d_model:int, d_ff:int, num_heads:int, max_sequence_len:int, theta=10000, device=None, dtype=None):
+        super().__init__()
+        self.ln1 = RMSNorm(d_model=d_model, dtype=dtype, device=device)
+        self.attn = causal_multihead_self_attention_with_rope(d_model=d_model, num_heads=num_heads, max_sequence_length=max_sequence_len, rope_theta=theta, device=device, dtype=dtype) # We need max_seq_len for RoPE buffer init when instantiating the Transformer_Block Module
+        self.ln2 = RMSNorm(d_model=d_model, dtype=dtype, device=device)
+        self.ffn = SwiGLU_FFN(d_model=d_model, d_ff=d_ff, dtype=dtype, device=device)
+    
+    def forward(self, x): # (B T d_model -> B T d_model)
+        y = x + self.attn(self.ln1(x))
+        output = y + self.ffn(self.ln2(y))
+        return output
