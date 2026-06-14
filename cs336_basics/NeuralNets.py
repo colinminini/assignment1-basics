@@ -122,7 +122,7 @@ def scaled_dot_product_attention(Q, K, V, mask=True):
 
 # Causal Multi Head Self Attention Module inherits from parent torch class nn.Module for methods like state_dict(), buffers(), to()...
 # Three Linear Layer Matrices of learnable weights (no biases): WQ, WK, WV
-# max_sequence_length should be T
+# max_sequence_length is NOT necessarily input sequence length. T is the input size but it can be truncated and not be of the full context size of the LM!
 # token_positions should be torch.arange(x.shape[1], device=x.device)
 
 class causal_multihead_self_attention_with_rope(nn.Module):
