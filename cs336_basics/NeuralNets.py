@@ -48,7 +48,7 @@ class RMSNorm(nn.Module):
         x = x.to(dtype = torch.float32)
         batched_rms = torch.sqrt(reduce(torch.square(x), '... d_model -> ... 1', reduction = 'mean') + self.eps)
         x_norm = torch.div(x, batched_rms)
-        result = einsum(x_norm, self.weight, '... d_model, d_model -> ... d_model')
+        result = einsum(x_norm, self.weight.to(dtype=torch.float32), '... d_model, d_model -> ... d_model')
         return result.to(dtype=in_dtype)
 
 # FFN Transformer Layer
@@ -149,7 +149,7 @@ class causal_multihead_self_attention_with_rope(nn.Module):
         output = scaled_dot_product_attention(Q, K, V, mask=self.mask[:T,:T]) # (B n_h T d_k)
         return self.output_proj(rearrange(output, '... nh T dk -> ... T (nh dk)', nh=self.num_heads))
 
-# Transformer Block
+# Transformer Block Module
 
 class Transformer_Block(nn.Module):
 
@@ -164,3 +164,21 @@ class Transformer_Block(nn.Module):
         y = x + self.attn(self.ln1(x))
         output = y + self.ffn(self.ln2(y))
         return output
+
+# Transformer LM Module
+
+class transformer_lm(nn.Module):
+
+    def __init__(self, vocab_size:int, d_model:int, d_ff:int, num_heads:int, num_blocks:int, context_length:int, theta=10000, device=None, dtype=None):
+        super().__init__()
+        self.token_embeddings = Embedding(num_embeddings=vocab_size, embedding_dim=d_model, dtype=dtype, device=device)
+        self.layers = nn.Sequential(*[Transformer_Block(d_model=d_model, d_ff=d_ff, num_heads=num_heads, max_sequence_len=context_length, theta=theta, device=device, dtype=dtype) for _ in range(num_blocks)])
+        self.ln_final = RMSNorm(d_model=d_model, dtype=dtype, device=device)
+        self.lm_head = Linear(in_features=d_model, out_features=vocab_size, dtype=dtype, device=device)
+    
+    def forward(self, x): # (B T -> B T vocab_size)
+        x_embd = self.token_embeddings(x) # (B T d_model)
+        for i in range(len(self.layers)):
+            x_embd = self.layers[i](x_embd)
+        x_embd = self.ln_final(x_embd)
+        return self.lm_head(x_embd)
