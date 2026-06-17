@@ -1,6 +1,7 @@
 import torch
 from einops import rearrange, einsum, reduce, repeat
 from torch import nn
+import math
 
 # ALl neural nets modules should inherent from nn.Module parent class -> inherits convenient methods such as: load_state_dict(), to(), get_parameters(), cpu(), cuda(), children(), bfloat16()...
 
@@ -183,6 +184,23 @@ class transformer_lm(nn.Module):
         x_embd = self.ln_final(x_embd)
         return self.lm_head(x_embd)
     
+# Dataclass config file (use .asdict() for arguments input)
+# Serialize (via json) and save to disk
+# Also can be a cfg.py python file that gets imported with import cfg
+# type hint for @dataclass __init__() helper built-in function to work at instanciation
+
+from dataclasses import dataclass
+import json
+
+@dataclass
+class Config:
+    vocab_size: int = 1000
+    d_model: int = 64
+    d_ff: int = 256
+    num_heads: int = 4
+    num_blocks: int = 3
+    context_length: int = 10
+    device: str = "cpu"
 # Cross-entropy loss. Scalar value of the current cost. Approximated through batched sampling. Root node of backpropagaton pass -> non-convex optimization
 
 def cross_entropy_loss(logits, targets) -> torch.float: # (... Vocab_size), (...)
@@ -197,3 +215,46 @@ def cross_entropy_loss_logsumexp_fused_kernel(logits, targets):
     gathered_logits = torch.gather(input=logits, dim=-1, index=targets.unsqueeze(-1) )
     batched_cross_entropy = - gathered_logits + torch.logsumexp(logits, dim=-1, keepdim=True) # (B T 1)
     return reduce(batched_cross_entropy, '... -> ', reduction='mean')
+
+# Implement AdamW: (lr, weight_decay, beta1, beta2)
+# Adam optimizer tracks a running the gradients moment of order 1 (hyperparameter: beta 1) and order 2 (beta 2)
+# AdamW adds a weight decay at the optimizer .step() (instead of at the gradient level for example)
+
+class AdamW(torch.optim.Optimizer):
+
+    def __init__(self, params, lr=1e-3, weight_decay=0.01, betas=(0.9, 0.95), eps=1e-8):
+
+        if lr < 0:
+            raise ValueError(f"Invalid learning rate: {lr}")
+
+        defaults = {"lr": lr, 'weight_decay': weight_decay, 'betas': betas, 'eps': eps}
+        super().__init__(params, defaults)
+
+    def step(self, closure = None):
+        loss = None if closure is None else closure()
+
+        for group in self.param_groups:
+            lr, weight_decay, (beta1, beta2), eps = group["lr"], group["weight_decay"], group["betas"], group["eps"] # Get the hyperparameters
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
+
+                state = self.state[p] # Get state associated with p
+                if len(state) == 0:
+                    state['moment_order_1'] = torch.zeros_like(p)
+                    state['moment_order_2'] = torch.zeros_like(p)
+                    state['t'] = 1
+
+                t = state['t']
+                grad = p.grad
+                moment_order_1 = state['moment_order_1'] * beta1 + (1 - beta1) * grad
+                moment_order_2 = state['moment_order_2'] * beta2 + (1 - beta2) * grad**2
+                adjusted_lr = lr * math.sqrt(1 - beta2**t) / (1 - beta1**t)
+                with torch.no_grad():
+                    p -= p * weight_decay * lr + adjusted_lr * moment_order_1 / (torch.sqrt(moment_order_2) + eps) # AdamW weight update. -= makes the update in_place, very important!
+
+                state['moment_order_1'] = moment_order_1 # stateful buffer of total size 4 * num_param (torch.float32)
+                state['moment_order_2'] = moment_order_2 # stateful buffer of total size 4 * num_param (torch.float32)
+                state["t"] = t + 1 
+
+        return loss
