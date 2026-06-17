@@ -182,3 +182,18 @@ class transformer_lm(nn.Module):
             x_embd = self.layers[i](x_embd)
         x_embd = self.ln_final(x_embd)
         return self.lm_head(x_embd)
+    
+# Cross-entropy loss. Scalar value of the current cost. Approximated through batched sampling. Root node of backpropagaton pass -> non-convex optimization
+
+def cross_entropy_loss(logits, targets) -> torch.float: # (... Vocab_size), (...)
+    max_logit = reduce(logits, '... V -> ... 1', reduction='max')
+    exp_norm_logits = torch.exp(logits - max_logit)
+    sum_exps = reduce(exp_norm_logits, '... V -> ... 1', reduction='sum')
+    gathered_logits = torch.gather(logits, dim=-1, index=repeat(targets, '... -> ... c', c=1)) # (...)
+    log_probs = gathered_logits - max_logit - torch.log(sum_exps)
+    return - ( reduce(log_probs, '... -> ', reduction='mean')) # averaged cost over batch and sequence
+
+def cross_entropy_loss_logsumexp_fused_kernel(logits, targets):
+    gathered_logits = torch.gather(input=logits, dim=-1, index=targets.unsqueeze(-1) )
+    batched_cross_entropy = - gathered_logits + torch.logsumexp(logits, dim=-1, keepdim=True) # (B T 1)
+    return reduce(batched_cross_entropy, '... -> ', reduction='mean')
