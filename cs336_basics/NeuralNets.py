@@ -271,3 +271,25 @@ def cosine_lr_schedule(t: int, lr_min: float, lr_max: float, T_warmup: int, T_c:
         return lr_min + 1/2 * (1 + math.cos((t-T_warmup) / (T_c - T_warmup) * math.pi)) * (lr_max - lr_min)
     else:
         return lr_min
+
+# Gradient Clipping Implementation
+
+def gradient_clipping(parameters_list: list[torch.tensor], max_grad: torch.float):
+    '''
+    Modifies parameters gradients in_place to cap the global l2-norm at max_grad
+    '''
+    running_l2_grad = 0
+
+    for p in parameters_list:
+
+        if p.grad is None:
+            continue
+
+        running_l2_grad += reduce(torch.square(p.grad), '... -> ', reduction='sum')
+    
+    l2_grad = torch.sqrt(running_l2_grad)
+
+    if l2_grad > max_grad:
+        for p in parameters_list:
+            if p.grad is not None:
+                p.grad *= max_grad / (l2_grad + 1e-6)
