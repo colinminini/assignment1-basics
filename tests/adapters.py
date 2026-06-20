@@ -535,7 +535,7 @@ def run_save_checkpoint(
             we've completed.
         out (str | os.PathLike | BinaryIO | IO[bytes]): Path or file-like object to serialize the model, optimizer, and iteration to.
     """
-    raise NotImplementedError
+    return NeuralNets.save_checkpoint(model, optimizer, iteration, out)
 
 
 def run_load_checkpoint(
@@ -556,7 +556,7 @@ def run_load_checkpoint(
     Returns:
         int: the previously-serialized number of iterations.
     """
-    raise NotImplementedError
+    return NeuralNets.load_checkpoint(src, model, optimizer)
 
 
 def get_tokenizer(

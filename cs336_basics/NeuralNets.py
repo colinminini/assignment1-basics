@@ -312,3 +312,16 @@ def get_batch(dataset, batch_size, context_len, device=None):
     x_batch, y_batch = torch.stack(x_batch), torch.stack(y_batch)
     x_batch, y_batch = x_batch.to(dtype=torch.int64), y_batch.to(dtype=torch.int64)
     return x_batch.to(device), y_batch.to(device)
+
+# Save checkpoint states to disk for re-usability. Save and load the checkpoint dict with keys 'model_state', 'optimizer_state' and 't'. States are dict
+
+def save_checkpoint(model, optimizer, iteration, out):
+    torch.save({'model_state': model.state_dict(), 'optimizer_state': optimizer.state_dict(), 't': iteration}, out)
+
+def load_checkpoint(path, model, optimizer):
+
+    checkpoint = torch.load(path)
+
+    model.load_state_dict(checkpoint['model_state'])
+    optimizer.load_state_dict(checkpoint['optimizer_state'])
+    return checkpoint['t']
