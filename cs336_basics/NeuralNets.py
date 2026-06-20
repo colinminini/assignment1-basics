@@ -2,6 +2,7 @@ import torch
 from einops import rearrange, einsum, reduce, repeat
 from torch import nn
 import math
+import numpy as np
 
 # ALl neural nets modules should inherent from nn.Module parent class -> inherits convenient methods such as: load_state_dict(), to(), get_parameters(), cpu(), cuda(), children(), bfloat16()...
 
@@ -293,3 +294,21 @@ def gradient_clipping(parameters_list: list[torch.tensor], max_grad: torch.float
         for p in parameters_list:
             if p.grad is not None:
                 p.grad *= max_grad / (l2_grad + 1e-6)
+
+# System training environment: load from disk (dataset) to system RAM + dataprocessing (CPU work) to GPU HBM (PCIe connection from system RAM to HBM)
+# List of tensors (from numpy) into torch.stack
+
+def get_batch(dataset, batch_size, context_len, device=None):
+    batch_ids = np.random.randint(low=0, high=len(dataset) - context_len, size=(batch_size,))
+    x_batch = []
+    y_batch = []
+    for i in batch_ids:
+        x = dataset[i:i+context_len]
+        y = dataset[i+1:i+context_len+1]
+        x = np.copy(x)
+        y = np.copy(y)
+        x_batch.append(torch.from_numpy(x))
+        y_batch.append(torch.from_numpy(y))
+    x_batch, y_batch = torch.stack(x_batch), torch.stack(y_batch)
+    x_batch, y_batch = x_batch.to(dtype=torch.int64), y_batch.to(dtype=torch.int64)
+    return x_batch.to(device), y_batch.to(device)
