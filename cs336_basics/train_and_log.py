@@ -9,7 +9,7 @@ import time
 
 # What do we need in the training environment?
 
-# num training tokens (num_steps * batch_size * context_length)
+# Num training tokens: num_steps * batch_size * context_length
 # Weights budget / model configuration: d_model, context_len, vocab_size, num_layers
 # -> Together gives FLOPs budget
 
