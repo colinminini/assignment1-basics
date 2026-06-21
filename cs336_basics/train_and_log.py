@@ -4,12 +4,15 @@ import torch
 import numpy as np
 import time
 
-# Training script, flexible on arguments (hyperparameter sweep) and config file
+# Training script, flexible on arguments: config default + parse_arguments() for CLI override
 # `uv run cs336_basics/train_and_log.py`
 
 # What do we need in the training environment?
-# FLOPs budget (num_steps)
-# model configuration: d_model, context_len, vocab_size, num_layers
+
+# num training tokens (num_steps * batch_size * context_length)
+# Weights budget / model configuration: d_model, context_len, vocab_size, num_layers
+# -> Together gives FLOPs budget
+
 # Optimizer hyperparameters: lr (max and min if lr_scheduler), weight decay, betas for AdamW
 
 # Initialize model and optimizer (attached to model parameters()) and load them in HBM
@@ -18,9 +21,7 @@ import time
 
 # ---
 
-# Initialization
-# Config is the default, replace with CLI arguments if provided
-# def parse_agrs() ...
+# Config is the default, replace with CLI arguments if provided: def parse_agrs() ...
 
 model_cfg = config.ModelConfig()
 optimizer_cfg = config.OptimizerConfig()
@@ -33,7 +34,6 @@ optimizer = NeuralNets.AdamW(model.parameters(), **optimizer_cfg.__dict__)
 dataset = np.load(training_cfg.train_file_path, mmap_mode='r')
 loss_fn = NeuralNets.cross_entropy_loss
 
-# Training Loop
 # Log every step with weights and biases ...
 
 start_time = time.time()
