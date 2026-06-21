@@ -10,7 +10,7 @@ import NeuralNets
 import torch
 import numpy as np
 
-# Run `bash cs336_basics/train_runs.sh`
+# Run `bash cs336_basics/launch_train.sh`
 
 
 try:
