@@ -1,0 +1,41 @@
+{
+  "os": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "python": "CPython 3.13.7",
+  "startedAt": "2026-06-21T21:26:44.881724Z",
+  "args": [
+    "--wandb",
+    "--wandb_project",
+    "cs336-basics",
+    "--wandb_run_name",
+    "small-transformer",
+    "--steps",
+    "100",
+    "--batch_size",
+    "32",
+    "--profile"
+  ],
+  "program": "/Users/colinminini/Desktop/Stanford CS336 - 2026/assignment1-basics/cs336_basics/train_vibe.py",
+  "codePath": "cs336_basics/train_vibe.py",
+  "codePathLocal": "cs336_basics/train_vibe.py",
+  "git": {
+    "remote": "https://github.com/colinminini/assignment1-basics",
+    "commit": "14538b13ec172a087b128c7730beb9f3fdde7d13"
+  },
+  "email": "colinminini@gmail.com",
+  "root": "/Users/colinminini/Desktop/Stanford CS336 - 2026/assignment1-basics",
+  "host": "pc-78.home",
+  "executable": "/Users/colinminini/Desktop/Stanford CS336 - 2026/assignment1-basics/.venv/bin/python3",
+  "cpu_count": 10,
+  "cpu_count_logical": 10,
+  "disk": {
+    "/": {
+      "total": "494384795648",
+      "used": "280955785216"
+    }
+  },
+  "memory": {
+    "total": "17179869184"
+  },
+  "apple": {},
+  "writerId": "pkrvpb1ck4m5f3rtnwwbjv4lb3nzm77k"
+}

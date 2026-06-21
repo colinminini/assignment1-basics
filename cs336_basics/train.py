@@ -5,7 +5,7 @@ import numpy as np
 import time
 
 # Training script, flexible on arguments: config default + parse_arguments() for CLI override
-# `uv run cs336_basics/train_and_log.py`
+# `uv run cs336_basics/train.py`
 
 # What do we need in the training environment?
 
