@@ -8,7 +8,7 @@ import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
 from cs336_basics import NeuralNets
-from cs336_basics import BPE_tokenizer
+from cs336_basics import tokenizer_vibe
 
 
 def run_linear(

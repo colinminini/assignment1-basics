@@ -26,32 +26,47 @@ import time
 model_cfg = config.ModelConfig()
 optimizer_cfg = config.OptimizerConfig()
 training_cfg = config.TrainingConfig()
+tokens_per_step = training_cfg.batch_size * model_cfg.context_length
 
 model = NeuralNets.transformer_lm(**model_cfg.__dict__)
 model.to(dtype=torch.float32)
 
+num_total_param = sum(torch.numel(p) for p in model.parameters())
+
 optimizer = NeuralNets.AdamW(model.parameters(), **optimizer_cfg.__dict__)
 dataset = np.load(training_cfg.train_file_path, mmap_mode='r')
 loss_fn = NeuralNets.cross_entropy_loss
+gardient_clipping = NeuralNets.gradient_clipping
+cosine_lr_schedule = NeuralNets.cosine_lr_schedule
 
 # Log every step with weights and biases ...
 
-start_time = time.time()
+@torch.no_grad
+def metrics_logging(model, optimizer, step, out_checkpoint_path):
+    params_grad_norm = sum(torch.square(p.grad).sum() for p in model.parameters() if p.grad is not None).sqrt.item()
+    stats = {
+        'params_grad': params_grad_norm,
+    }
+    return stats
+
+start_time = time.perf_counter()
 
 if __name__ == '__main__':
+    print('Total Parameter Count:', f'{num_total_param}')
     for step in range(1, training_cfg.steps + 1):
         x_batch, y_batch = NeuralNets.get_batch(dataset=dataset, batch_size=training_cfg.batch_size, context_len=model_cfg.context_length, device=model_cfg.device) # get_batch() to GPU
         logits = model(x_batch) # forward() pass
         #print('logits:', f'{logits}')
         loss = loss_fn(logits=logits, targets=y_batch) # Cost scalar
-        print('loss:', f'{loss.item()}')
+        print('loss:', f'{loss.item():.4f}')
         optimizer.zero_grad() # zeroing out the parameters gradients. Autograd graph ready for backprop()
         loss.backward() # backward pass (note: Flash-attention re-computes n square attention scores instead of savings the activations)
-        #print('params_before:', f'{list(model.parameters())[4]}')
+        gardient_clipping(model.parameters(), max_grad=training_cfg.max_grad)
         optimizer.step() # AdamW step, weights get updated
-        #print('params_after:', f'{list(model.parameters())[4]}')
-        if step % training_cfg.log_every == 0: # save model & optimizer states (& iteration step)
-            NeuralNets.save_checkpoint(model, optimizer, step, training_cfg.out_checkpoint_path + f'{step}' + '.pt')
+        if step % training_cfg.val_and_log_every == 0: # save model & optimizer states (& iteration step)
+            with torch.no_grad():
+                NeuralNets.save_checkpoint(model, optimizer, step, training_cfg.out_checkpoint_path + f'{step}' + '.pt')
         # ... log relevant metrics into weights and biases
-        print('time_spent_on_batch:', f'{time.time() - start_time}')
-        start_time = time.time()
+        end_time = time.perf_counter() - start_time
+        print('time_spent_on_batch:', f'{end_time:.2f}', 'tokens_per_second:', f'{int(tokens_per_step / end_time)}')
+        start_time = time.perf_counter()

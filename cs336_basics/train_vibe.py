@@ -4,19 +4,31 @@ import glob
 import math
 import os
 import time
-
 import config
 import NeuralNets
 import torch
 import numpy as np
+import wandb
 
-# Run `bash cs336_basics/launch_train.sh`
+# Run `bash run.sh`
 
+# Training script, flexible on arguments: config default + parse_arguments() for CLI override
 
-try:
-    import wandb
-except ImportError:
-    wandb = None
+# What do we need in the training environment?
+
+# Num training tokens: num_steps * batch_size * context_length
+# Weights budget / model configuration: d_model, context_len, vocab_size, num_layers
+# -> Together gives FLOPs budget
+
+# Optimizer hyperparameters: lr (max and min if lr_scheduler), weight decay, betas for AdamW
+
+# Initialize model and optimizer (attached to model parameters()) and load them in HBM
+
+# Training Loop: get_batch to GPU -> forward() -> zero_grad() + backward() -> optmizer step() -> log batch_loss & gradients -> save model & optimizer checkpoints if num_steps % log_step == 0 -> repeat
+
+# ---
+
+# Config is the default, replace with CLI arguments if provided: def parse_agrs() ...
 
 
 def parse_args():
@@ -49,32 +61,15 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--weight_decay", type=float, default=None)
     parser.add_argument("--train_file_path", type=str, default=None)
+    parser.add_argument("--val_file_path", type=str, default=None)
     parser.add_argument("--out_checkpoint_path", type=str, default=None)
-    parser.add_argument("--log_every", type=int, default=None)
+    parser.add_argument('--with_cosine_lr', action='store_true')
+    parser.add_argument('--with_gradient_clipping', action='store_true')
 
-    args, unknown = parser.parse_known_args()
-    return args, unknown
+    args = parser.parse_args()
+    return args
 
-
-def coerce(value, old_value):
-    if isinstance(old_value, bool):
-        return value.lower() in {"1", "true", "yes", "y"}
-    if isinstance(old_value, int) and not isinstance(old_value, bool):
-        return int(value)
-    if isinstance(old_value, float):
-        return float(value)
-    if isinstance(old_value, torch.device):
-        return torch.device(value)
-    return value
-
-
-def set_cfg_attr(cfg, name, value):
-    if not hasattr(cfg, name):
-        raise ValueError(f"Unknown config field: {name}")
-    setattr(cfg, name, coerce(value, getattr(cfg, name)))
-
-
-def apply_cli(args, unknown, model_cfg, optimizer_cfg, training_cfg):
+def apply_cli(args, model_cfg, optimizer_cfg, training_cfg):
     if args.steps is not None:
         training_cfg.steps = args.steps
     if args.batch_size is not None:
@@ -89,61 +84,10 @@ def apply_cli(args, unknown, model_cfg, optimizer_cfg, training_cfg):
         optimizer_cfg.weight_decay = args.weight_decay
     if args.train_file_path is not None:
         training_cfg.train_file_path = args.train_file_path
+    if args.val_file_path is not None:
+        training_cfg.val_file_path = args.val_file_path
     if args.out_checkpoint_path is not None:
         training_cfg.out_checkpoint_path = args.out_checkpoint_path
-    if args.log_every is not None:
-        training_cfg.log_every = args.log_every
-
-    groups = {
-        "model": model_cfg,
-        "optim": optimizer_cfg,
-        "optimizer": optimizer_cfg,
-        "train": training_cfg,
-        "training": training_cfg,
-    }
-
-    i = 0
-    while i < len(unknown):
-        token = unknown[i]
-        if not token.startswith("--"):
-            raise ValueError(f"Unexpected CLI token: {token}")
-
-        key = token[2:]
-        if "=" in key:
-            key, value = key.split("=", 1)
-        else:
-            i += 1
-            if i >= len(unknown):
-                raise ValueError(f"Missing value for --{key}")
-            value = unknown[i]
-
-        if "." not in key:
-            raise ValueError(
-                f"Unknown arg --{key}. Use --model.x, --optimizer.x, or --training.x"
-            )
-
-        group, field = key.split(".", 1)
-        if group not in groups:
-            raise ValueError(f"Unknown config group: {group}")
-
-        set_cfg_attr(groups[group], field, value)
-        i += 1
-
-
-def cfg_dict(model_cfg, optimizer_cfg, training_cfg):
-    out = {}
-    for prefix, cfg in [
-        ("model", model_cfg),
-        ("optimizer", optimizer_cfg),
-        ("training", training_cfg),
-    ]:
-        for k, v in vars(cfg).items():
-            if isinstance(v, (int, float, str, bool, type(None))):
-                out[f"{prefix}.{k}"] = v
-            else:
-                out[f"{prefix}.{k}"] = str(v)
-    return out
-
 
 def hardware_dict(device):
     info = {
@@ -165,18 +109,6 @@ def hardware_dict(device):
         })
 
     return info
-
-
-def count_params(model):
-    total = sum(p.numel() for p in model.parameters())
-    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    return total, trainable
-
-
-def sync_if_cuda(device):
-    if device.type == "cuda":
-        torch.cuda.synchronize(device)
-
 
 @torch.no_grad()
 def model_stats(model):
@@ -215,7 +147,6 @@ def model_stats(model):
         "param/abs_max": param_abs_max.item(),
     }
 
-
 def cuda_mem_stats(device):
     if device.type != "cuda":
         return {}
@@ -229,13 +160,6 @@ def cuda_mem_stats(device):
         "cuda/max_memory_reserved_gb": torch.cuda.max_memory_reserved(device) / 1e9,
         "cuda/memory_allocated_pct": 100 * torch.cuda.memory_allocated(device) / total,
     }
-
-
-def current_lr(optimizer, optimizer_cfg):
-    if hasattr(optimizer, "param_groups"):
-        return optimizer.param_groups[0].get("lr", None)
-    return getattr(optimizer_cfg, "lr", None)
-
 
 def make_profiler(args, device):
     if not args.profile:
@@ -259,7 +183,6 @@ def make_profiler(args, device):
         with_stack=True,
     )
 
-
 def log_profiler_to_wandb(run, profile_dir):
     traces = glob.glob(os.path.join(profile_dir, "**", "*.pt.trace.json"), recursive=True)
     if not traces:
@@ -272,12 +195,12 @@ def log_profiler_to_wandb(run, profile_dir):
 
 
 if __name__ == "__main__":
-    args, unknown = parse_args()
+    args = parse_args()
 
     model_cfg = config.ModelConfig()
     optimizer_cfg = config.OptimizerConfig()
     training_cfg = config.TrainingConfig()
-    apply_cli(args, unknown, model_cfg, optimizer_cfg, training_cfg)
+    apply_cli(args, model_cfg, optimizer_cfg, training_cfg)
 
     device = torch.device(model_cfg.device)
 
@@ -285,27 +208,33 @@ if __name__ == "__main__":
     model.to(device=device, dtype=torch.float32)
 
     optimizer = NeuralNets.AdamW(model.parameters(), **optimizer_cfg.__dict__)
-    dataset = np.load(training_cfg.train_file_path, mmap_mode="r")
-    loss_fn = NeuralNets.cross_entropy_loss
 
-    total_params, trainable_params = count_params(model)
+    train_dataset = np.load(training_cfg.train_file_path, mmap_mode="r")
+    val_dataset = np.load(training_cfg.val_file_path, mmap_mode='r')
+
+    loss_fn = NeuralNets.cross_entropy_loss
+    if args.with_gradient_clipping:
+        gradient_clipping = NeuralNets.gradient_clipping
+    if args.with_cosine_lr:
+        cosine_lr_schedule = NeuralNets.cosine_lr_schedule
+
+    total_params = sum(torch.numel(p) for p in model.parameters())
+
     tokens_per_step = training_cfg.batch_size * model_cfg.context_length
 
     run = None
     if args.wandb:
-        if wandb is None:
-            raise ImportError("Install W&B first: pip install wandb")
-
         run = wandb.init(
             project=args.wandb_project,
             entity=args.wandb_entity,
             name=args.wandb_run_name,
             mode=args.wandb_mode,
             config={
-                **cfg_dict(model_cfg, optimizer_cfg, training_cfg),
+                **model_cfg.__dict__, 
+                **optimizer_cfg.__dict__, 
+                **training_cfg.__dict__,
                 **hardware_dict(device),
                 "model.total_params": total_params,
-                "model.trainable_params": trainable_params,
                 "benchmark.tokens_per_step": tokens_per_step,
             },
         )
@@ -322,15 +251,17 @@ if __name__ == "__main__":
         for step in range(1, training_cfg.steps + 1):
             if device.type == "cuda":
                 torch.cuda.reset_peak_memory_stats(device)
+                torch.cuda.synchronize()
+            if device.type == 'mps':
+                torch.mps.synchronize()
 
-            sync_if_cuda(device)
             t0 = time.perf_counter()
 
             x_batch, y_batch = NeuralNets.get_batch(
-                dataset=dataset,
+                dataset=train_dataset,
                 batch_size=training_cfg.batch_size,
                 context_len=model_cfg.context_length,
-                device=model_cfg.device,
+                device=device,
             )
 
             logits = model(x_batch)
@@ -338,25 +269,22 @@ if __name__ == "__main__":
 
             optimizer.zero_grad()
             loss.backward()
-
-            stats = model_stats(model)
+            if args.with_gradient_clipping:
+                gradient_clipping(model.parameters(), max_grad=training_cfg.max_grad)
+            if args.with_cosine_lr:
+                for group in optimizer.param_groups:
+                    group['lr'] = cosine_lr_schedule(t=step, lr_min=training_cfg.lr_min, lr_max=training_cfg.lr_max, T_warmup=training_cfg.T_warmup, T_c=training_cfg.T_c)
 
             optimizer.step()
 
-            sync_if_cuda(device)
+            if device.type == 'cuda':
+                torch.cuda.synchronize()
+            if device.type == 'mps':
+                torch.mps.synchronize()
             step_time = time.perf_counter() - t0
 
-            metrics = {
-                "train/loss": loss.item(),
-                "train/perplexity": math.exp(min(loss.item(), 20)),
-                "train/lr": current_lr(optimizer, optimizer_cfg),
-                "perf/step_time_s": step_time,
-                "perf/tokens_per_s": tokens_per_step / step_time,
-                "perf/samples_per_s": training_cfg.batch_size / step_time,
-                "perf/tokens_seen": step * tokens_per_step,
-                **stats,
-                **cuda_mem_stats(device),
-            }
+            if run is not None and step % args.wandb_log_every == 0:
+                stats = model_stats(model)
 
             print(
                 f"step={step} "
@@ -366,15 +294,42 @@ if __name__ == "__main__":
             )
 
             if run is not None and step % args.wandb_log_every == 0:
+                metrics = {
+                "train/loss": loss.item(),
+                "train/perplexity": math.exp(min(loss.item(), 20)),
+                "train/lr": optimizer.param_groups[0]['lr'],
+                "perf/step_time_s": step_time,
+                "perf/tokens_per_s": tokens_per_step / step_time,
+                "perf/samples_per_s": training_cfg.batch_size / step_time,
+                "perf/tokens_seen": step * tokens_per_step,
+                **stats,
+                **cuda_mem_stats(device)}
                 wandb.log(metrics, step=step)
 
-            if step % training_cfg.log_every == 0:
+            if step % training_cfg.val_and_log_every == 0:
+
                 NeuralNets.save_checkpoint(
                     model,
                     optimizer,
                     step,
                     training_cfg.out_checkpoint_path + f"{step}.pt",
                 )
+
+                model.eval()
+
+                val_loss = 0
+                num_val_steps = 50
+
+                for i in range(num_val_steps):
+                    x_batch, y_batch = NeuralNets.get_batch(dataset=val_dataset, batch_size=training_cfg.batch_size, context_len=model_cfg.context_length, device=device)
+                    val_loss += loss_fn(model(x_batch), y_batch).item()
+
+                val_loss = val_loss / num_val_steps
+
+                model.train()
+
+                if run is not None:
+                    wandb.log({'validation/loss': val_loss}, step=step)
 
             if prof is not None:
                 prof.step()
@@ -383,7 +338,6 @@ if __name__ == "__main__":
         run.summary["final_loss"] = loss.item()
         run.summary["total_tokens_seen"] = training_cfg.steps * tokens_per_step
         run.summary["total_params"] = total_params
-        run.summary["trainable_params"] = trainable_params
 
         if args.profile:
             log_profiler_to_wandb(run, args.profile_dir)

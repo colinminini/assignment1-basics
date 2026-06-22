@@ -7,16 +7,6 @@ from dataclasses import dataclass
 import json
 
 @dataclass
-class Config:
-    vocab_size: int = 1000
-    d_model: int = 64
-    d_ff: int = 256
-    num_heads: int = 4
-    num_blocks: int = 3
-    context_length: int = 10
-    device: str = "mps"
-
-@dataclass
 class ModelConfig:
     d_model: int = 512
     d_ff: int = 1344
@@ -36,9 +26,14 @@ class OptimizerConfig:
 
 @dataclass
 class TrainingConfig:
-    batch_size: int = 32
-    steps: int = 20 # 10M training tokens
+    lr_min: float = 1e-5
+    lr_max: float = 1e-4
+    T_warmup: int = 10
+    T_c: int = 80
     max_grad: float = 1.0
+    batch_size: int = 32
+    steps: int = 100 # 10M training tokens
+    val_and_log_every: int = 20
     train_file_path: str = './data/TinyStoriesV2-GPT4-valid.npy'
-    log_every: int = 10
+    val_file_path: str = './data/TinyStoriesV2-GPT4-train.npy'
     out_checkpoint_path: str = './data/checkpoints/checkpoint_'

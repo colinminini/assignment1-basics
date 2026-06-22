@@ -262,21 +262,15 @@ def gradient_clipping(parameters_list: list[torch.tensor], max_grad: torch.float
     '''
     Modifies parameters gradients in_place to cap the global l2-norm at max_grad
     '''
-    running_l2_grad = 0
+    parameters_list = [p for p in parameters_list if p.requires_grad and p.grad is not None]
+    if len(parameters_list) == 0:
+        return None
+    glob_grad_l2_norm = sum(torch.square(p.grad).sum() for p in parameters_list).sqrt().item()
 
-    for p in parameters_list:
-
-        if p.grad is None:
-            continue
-
-        running_l2_grad += reduce(torch.square(p.grad), '... -> ', reduction='sum')
-    
-    l2_grad = torch.sqrt(running_l2_grad)
-
-    if l2_grad > max_grad:
+    if glob_grad_l2_norm > max_grad:
+        scale = max_grad / (glob_grad_l2_norm + 1e-6)
         for p in parameters_list:
-            if p.grad is not None:
-                p.grad *= max_grad / (l2_grad + 1e-6)
+            p.grad *= scale
 
 # System training environment: load from disk (dataset) to system RAM + dataprocessing (CPU work) to GPU HBM (PCIe connection from system RAM to HBM)
 # List of tensors (from numpy) into torch.stack
