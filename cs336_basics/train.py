@@ -23,36 +23,37 @@ import time
 
 # Config is the default, replace with CLI arguments if provided: def parse_agrs() ...
 
-model_cfg = config.ModelConfig()
-optimizer_cfg = config.OptimizerConfig()
-training_cfg = config.TrainingConfig()
-tokens_per_step = training_cfg.batch_size * model_cfg.context_length
-
-model = NeuralNets.transformer_lm(**model_cfg.__dict__)
-model.to(dtype=torch.float32)
-
-num_total_param = sum(torch.numel(p) for p in model.parameters())
-
-optimizer = NeuralNets.AdamW(model.parameters(), **optimizer_cfg.__dict__)
-dataset = np.load(training_cfg.train_file_path, mmap_mode='r')
-loss_fn = NeuralNets.cross_entropy_loss
-gardient_clipping = NeuralNets.gradient_clipping
-cosine_lr_schedule = NeuralNets.cosine_lr_schedule
-
 # Log every step with weights and biases ...
 
 @torch.no_grad
 def metrics_logging(model, optimizer, step, out_checkpoint_path):
-    params_grad_norm = sum(torch.square(p.grad).sum() for p in model.parameters() if p.grad is not None).sqrt.item()
+    global_grad_norm = sum(torch.square(p.grad).sum() for p in model.parameters() if p.grad is not None).sqrt.item()
     stats = {
-        'params_grad': params_grad_norm,
+        'gloab_grad_norm': global_grad_norm,
     }
     return stats
 
-start_time = time.perf_counter()
-
 if __name__ == '__main__':
+
+    model_cfg = config.ModelConfig()
+    optimizer_cfg = config.OptimizerConfig()
+    training_cfg = config.TrainingConfig()
+    tokens_per_step = training_cfg.batch_size * model_cfg.context_length
+
+    model = NeuralNets.transformer_lm(**model_cfg.__dict__)
+    model.to(dtype=torch.float32)
+
+    num_total_param = sum(torch.numel(p) for p in model.parameters())
+
+    optimizer = NeuralNets.AdamW(model.parameters(), **optimizer_cfg.__dict__)
+    dataset = np.load(training_cfg.train_file_path, mmap_mode='r')
+    loss_fn = NeuralNets.cross_entropy_loss
+    gardient_clipping = NeuralNets.gradient_clipping
+    cosine_lr_schedule = NeuralNets.cosine_lr_schedule
+
     print('Total Parameter Count:', f'{num_total_param}')
+
+    start_time = time.perf_counter()
     for step in range(1, training_cfg.steps + 1):
         x_batch, y_batch = NeuralNets.get_batch(dataset=dataset, batch_size=training_cfg.batch_size, context_len=model_cfg.context_length, device=model_cfg.device) # get_batch() to GPU
         logits = model(x_batch) # forward() pass
