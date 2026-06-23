@@ -250,6 +250,8 @@ if __name__ == "__main__":
             )
 
     with make_profiler(args, device) as prof:
+        start_wall_clock_time = time.perf_counter()
+        
         for step in range(1, training_cfg.steps + 1):
             if device.type == "cuda":
                 torch.cuda.reset_peak_memory_stats(device)
@@ -304,6 +306,7 @@ if __name__ == "__main__":
                 "perf/tokens_per_s": tokens_per_step / step_time,
                 "perf/samples_per_s": training_cfg.batch_size / step_time,
                 "perf/tokens_seen": step * tokens_per_step,
+                "perf/wall_clock_time": time.perf_counter() - start_wall_clock_time,
                 **stats,
                 **cuda_mem_stats(device)}
                 wandb.log(metrics, step=step)
@@ -340,7 +343,7 @@ if __name__ == "__main__":
         run.summary["final_loss"] = loss.item()
         run.summary["total_tokens_seen"] = training_cfg.steps * tokens_per_step
         run.summary["total_params"] = total_params
-
+        run.summary['total_wall_clock_time'] = time.perf_counter() - start_wall_clock_time
         if args.profile:
             log_profiler_to_wandb(run, args.profile_dir)
 
