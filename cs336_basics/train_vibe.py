@@ -65,6 +65,7 @@ def parse_args():
     parser.add_argument("--out_checkpoint_path", type=str, default=None)
     parser.add_argument('--with_cosine_lr', action='store_true')
     parser.add_argument('--with_gradient_clipping', action='store_true')
+    parser.add_argument('--dtype', type=torch.dtype, default=torch.float32)
 
     args = parser.parse_args()
     return args
@@ -88,6 +89,8 @@ def apply_cli(args, model_cfg, optimizer_cfg, training_cfg):
         training_cfg.val_file_path = args.val_file_path
     if args.out_checkpoint_path is not None:
         training_cfg.out_checkpoint_path = args.out_checkpoint_path
+    if args.dtype is not None:
+        model_cfg.dtype = args.dtype
 
 def hardware_dict(device):
     info = {

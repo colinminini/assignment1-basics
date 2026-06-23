@@ -100,11 +100,11 @@ class RoPE(nn.Module):
         output_paired = einsum(sequence_rope, x_paired, '... T dk2 l c, ... T dk2 c -> ... T dk2 l')
         return rearrange(output_paired, '... T dk2 l -> ... T (dk2 l)').to(x_dtype)
 
-def Softmax(x: torch.Tensor, dim: int):
+def Softmax(x: torch.Tensor, dim: int, temperature: float = 1):   
     x_copy = torch.transpose(x, dim, -1) # (... i)
     x_minus_max = reduce(x_copy, '... i -> ... 1', reduction='max')
     x_copy = x_copy - x_minus_max # Stability trick to avoidd exp(vi) to become inf and then having inf/inf = NaN
-    x_copy = torch.exp(x_copy)
+    x_copy = torch.exp(x_copy / temperature)
     x_div = reduce(x_copy, '... i -> ... 1', reduction='sum')
     probs = torch.div(x_copy, x_div)
     return torch.transpose(probs, dim, -1)
@@ -303,3 +303,38 @@ def load_checkpoint(path, model, optimizer):
     model.load_state_dict(checkpoint['model_state'])
     optimizer.load_state_dict(checkpoint['optimizer_state'])
     return checkpoint['t']
+
+# Decoding: auto-regressive prefill decoding
+
+@torch.no_grad()
+def decoding(input_str, model, tok, top_k = None, max_tokens=10, temperature=1, eos_token_id=0, streaming=True):
+    device = next(model.parameters()).device
+
+    input_ids = tok.encode(input_str)
+
+    decoded_sq = torch.from_numpy(input_ids)
+    decoded_sq = decoded_sq.to(device=device, dtype=torch.int64)
+    decoded_sq = rearrange(decoded_sq, 'l -> 1 l')
+
+    num_decode_tokens = 0
+
+    while num_decode_tokens < max_tokens and decoded_sq[0, -1].item() != eos_token_id:
+        last_token_logit = rearrange(model(decoded_sq)[:, -1, :], '1 vocab -> vocab') # Logits of the last token only
+        if top_k:
+            top_k_logit = torch.topk(last_token_logit, k=top_k, sorted=False).values # (top_k)
+            top_k_ids = torch.topk(last_token_logit, k=top_k, sorted=False).indices
+            last_token_logit = top_k_logit
+
+        probs = Softmax(last_token_logit, dim=0, temperature=temperature)
+        sample_token_id = torch.multinomial(probs, num_samples=1)
+
+        if top_k:
+            sample_token_id = top_k_ids[sample_token_id]
+
+        decoded_sq = torch.cat((decoded_sq, sample_token_id.unsqueeze(0)), dim=-1)
+
+        if streaming:
+            print(tok.decode(decoded_sq.to(device='cpu'))) # decoded_sq shape is (1, T + 1)
+
+        num_decode_tokens += 1
+    return decoded_sq.squeeze(0)
