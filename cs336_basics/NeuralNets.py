@@ -87,17 +87,18 @@ class RoPE(nn.Module):
     # Create a ([T, d_k/2, 2, 2]) tensor of rotation matrices, rearrange x to become (... d_k/2 2) then MatMul then back to (... d_k)
     def __init__(self, theta: int, d_k: int, max_sequence_len: int, device=None, dtype=None):
         super().__init__()
-        self.thetas_dim = theta ** (-torch.arange(0, d_k, step=2, device=device, dtype=dtype) / d_k)
-        self.thetas_sequence = einsum(torch.arange(0, max_sequence_len, device=device, dtype=dtype), self.thetas_dim, 'maxT, d2 -> maxT d2')
+        self.thetas_dim = theta ** (-torch.arange(0, d_k, step=2, device=device, dtype=torch.float32) / d_k)
+        self.thetas_sequence = einsum(torch.arange(0, max_sequence_len, device=device, dtype=torch.float32), self.thetas_dim, 'maxT, d2 -> maxT d2')
         self.stack = torch.stack([torch.cos(self.thetas_sequence), -torch.sin(self.thetas_sequence), 
                                 torch.sin(self.thetas_sequence), torch.cos(self.thetas_sequence)]) # (4, maxT, d_k/2)
         self.register_buffer('RoPE', rearrange(self.stack, ' (l c) maxT d2 -> maxT d2 l c', l=2, c=2), persistent=False)
     
     def forward(self, x, token_positions): # x size: (... T d_k) / token_positions size: (... T)
+        x_dtype = x.dtype
         sequence_rope = self.RoPE[token_positions] # (... T d2 l c)
-        x_paired = rearrange(x, '... T (d1 d2) -> ... T d1 d2', d2=2)
+        x_paired = rearrange(x, '... T (d1 d2) -> ... T d1 d2', d2=2).to(dtype=torch.float32)
         output_paired = einsum(sequence_rope, x_paired, '... T dk2 l c, ... T dk2 c -> ... T dk2 l')
-        return rearrange(output_paired, '... T dk2 l -> ... T (dk2 l)')
+        return rearrange(output_paired, '... T dk2 l -> ... T (dk2 l)').to(x_dtype)
 
 def Softmax(x: torch.Tensor, dim: int):
     x_copy = torch.transpose(x, dim, -1) # (... i)

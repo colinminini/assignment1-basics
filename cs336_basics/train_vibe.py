@@ -205,7 +205,6 @@ if __name__ == "__main__":
     device = torch.device(model_cfg.device)
 
     model = NeuralNets.transformer_lm(**model_cfg.__dict__)
-    model.to(device=device, dtype=torch.float32)
 
     optimizer = NeuralNets.AdamW(model.parameters(), **optimizer_cfg.__dict__)
 

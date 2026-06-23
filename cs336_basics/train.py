@@ -41,7 +41,6 @@ if __name__ == '__main__':
     tokens_per_step = training_cfg.batch_size * model_cfg.context_length
 
     model = NeuralNets.transformer_lm(**model_cfg.__dict__)
-    model.to(dtype=torch.float32)
 
     num_total_param = sum(torch.numel(p) for p in model.parameters())
 
@@ -57,7 +56,7 @@ if __name__ == '__main__':
     for step in range(1, training_cfg.steps + 1):
         x_batch, y_batch = NeuralNets.get_batch(dataset=dataset, batch_size=training_cfg.batch_size, context_len=model_cfg.context_length, device=model_cfg.device) # get_batch() to GPU
         logits = model(x_batch) # forward() pass
-        #print('logits:', f'{logits}')
+        # print('logits:', f'{logits}')
         loss = loss_fn(logits=logits, targets=y_batch) # Cost scalar
         print('loss:', f'{loss.item():.4f}')
         optimizer.zero_grad() # zeroing out the parameters gradients. Autograd graph ready for backprop()

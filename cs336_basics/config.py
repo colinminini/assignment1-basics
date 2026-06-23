@@ -5,6 +5,7 @@
 
 from dataclasses import dataclass
 import json
+import torch
 
 @dataclass
 class ModelConfig:
@@ -16,6 +17,7 @@ class ModelConfig:
     num_heads: int = 16
     num_blocks : int = 4
     device: str = 'mps'
+    dtype: torch.dtype = torch.float32
 
 @dataclass
 class OptimizerConfig:
