@@ -13,7 +13,7 @@ class ModelConfig:
     d_ff: int = 1344
     context_length: int = 256
     theta: int = 10000
-    vocab_size: int = 4096
+    vocab_size: int = 10000
     num_heads: int = 16
     num_blocks : int = 4
     device: str = 'mps'
@@ -28,10 +28,10 @@ class OptimizerConfig:
 
 @dataclass
 class TrainingConfig:
-    lr_min: float = 1e-5
-    lr_max: float = 1e-4
-    T_warmup: int = 10
-    T_c: int = 80
+    lr_min: float = 1e-3
+    lr_max: float = 0.5e-2
+    T_warmup: int = 20
+    T_c: int = 100
     max_grad: float = 1.0
     batch_size: int = 32
     steps: int = 100 # 10M training tokens

@@ -292,7 +292,7 @@ class FastTokenizer:
 
 if __name__ == '__main__':
 
-    tok = FastTokenizer.train(files="./data/TinyStoriesV2-GPT4-train.txt", out_dir="./data/my_tokenizer", vocab_size=4096, min_frequency=2, sep_token="<|endoftext|>")
+    tok = FastTokenizer.train(files="./data/TinyStoriesV2-GPT4-train.txt", out_dir="./data/my_tokenizer", vocab_size=10000, min_frequency=2, sep_token="<|endoftext|>")
 
     tok = FastTokenizer(tokenizer_json="./data/my_tokenizer/tokenizer.json", sep_token="<|endoftext|>")
 
