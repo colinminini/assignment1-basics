@@ -35,7 +35,8 @@ class TrainingConfig:
     max_grad: float = 1.0
     batch_size: int = 32
     steps: int = 40000 # 327.68M training tokens at batch_size = 32
-    val_and_log_every: int = 50
+    val_and_log_every: int = 1000
+    checkpoint_every: int = 5000
     train_file_path: str = './data/TinyStoriesV2-GPT4-valid.npy'
     val_file_path: str = './data/TinyStoriesV2-GPT4-train.npy'
-    out_checkpoint_path: str = './data/checkpoints/checkpoint_'
+    out_checkpoint_path: str = './data/ckpt/checkpoint_'

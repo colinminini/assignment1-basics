@@ -71,6 +71,8 @@ def parse_args():
     parser.add_argument('--with_gradient_clipping', action='store_true')
     parser.add_argument('--with_mixed_precision', action='store_true')
     parser.add_argument('--with_torch_compile', action='store_true')
+    parser.add_argument('--val_and_log_every', type=int, default=None)
+    parser.add_argument('--checkpoint_every', type=int, default=None)
 
     args = parser.parse_args()
     return args
@@ -102,6 +104,11 @@ def apply_cli(args, model_cfg, optimizer_cfg, training_cfg):
         training_cfg.val_file_path = args.val_file_path
     if args.out_checkpoint_path is not None:
         training_cfg.out_checkpoint_path = args.out_checkpoint_path
+    if args.val_and_log_every is not None:
+        training_cfg.val_and_log_every = args.val_and_log_every
+    if args.checkpoint_every is not None:
+        training_cfg.checkpoint_every = args.checkpoint_every
+
 
 def hardware_dict(device):
     info = {
@@ -330,18 +337,11 @@ if __name__ == "__main__":
                 wandb.log(metrics, step=step)
 
             if step % training_cfg.val_and_log_every == 0:
-                to_save = getattr(model, "_orig_mod", model)
-                NeuralNets.save_checkpoint(
-                    to_save,
-                    optimizer,
-                    step,
-                    training_cfg.out_checkpoint_path + f"{step}.pt",
-                )
 
                 model.eval()
                 with torch.no_grad():
                     val_loss = 0
-                    num_val_steps = 50
+                    num_val_steps = 100
 
                     for i in range(num_val_steps):
                         x_batch, y_batch = NeuralNets.get_batch(dataset=val_dataset, batch_size=training_cfg.batch_size, context_len=model_cfg.context_length, device=device)
@@ -354,6 +354,14 @@ if __name__ == "__main__":
                 if run is not None:
                     wandb.log({'validation/loss': val_loss}, step=step)
 
+            if step % training_cfg.checkpoint_every == 0:
+                to_save = getattr(model, "_orig_mod", model)
+                NeuralNets.save_checkpoint(
+                    to_save,
+                    optimizer,
+                    step,
+                    training_cfg.out_checkpoint_path + f"{step}.pt",
+                )
             if prof is not None:
                 prof.step()
 
