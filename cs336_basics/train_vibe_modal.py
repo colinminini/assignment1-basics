@@ -20,7 +20,7 @@ ckpt_vol = modal.Volume.from_name("cs336-ckpt", create_if_missing=True)
     gpu="B200",                              # CUDA hardware attached at run
     secrets=[modal.Secret.from_name("wandb")],    # -> WANDB_API_KEY env var
     volumes={"/data": data_vol, "/ckpt": ckpt_vol},
-    timeout=24 * 60 * 60,
+    timeout=45 * 60, # Max runtime of 45 minutes
 )
 def train(argv: list[str]):
     import sys, runpy
