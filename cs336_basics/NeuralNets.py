@@ -298,7 +298,7 @@ def save_checkpoint(model, optimizer, iteration, out):
 
 def load_checkpoint(path, model, optimizer):
 
-    checkpoint = torch.load(path)
+    checkpoint = torch.load(path, map_location='cpu')
 
     model.load_state_dict(checkpoint['model_state'])
     optimizer.load_state_dict(checkpoint['optimizer_state'])
