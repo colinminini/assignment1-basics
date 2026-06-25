@@ -218,6 +218,9 @@ if __name__ == "__main__":
 
     device = torch.device(model_cfg.device)
 
+    if device.type == 'cuda':
+        torch.set_float32_matmul_precision('high')
+
     model_cfg.dtype = torch.bfloat16 if args.with_mixed_precision else torch.float32
     model = NeuralNets.transformer_lm(**model_cfg.__dict__)
 
