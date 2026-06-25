@@ -292,10 +292,10 @@ class FastTokenizer:
 
 if __name__ == '__main__':
 
-    tok = FastTokenizer.train(files="./data/TinyStoriesV2-GPT4-train.txt", out_dir="./data/my_tokenizer", vocab_size=10000, min_frequency=2, sep_token="<|endoftext|>")
+    tok = FastTokenizer.train(files="./data/owt-train.txt", out_dir="./data/owt-my_tokenizer", vocab_size=32000, min_frequency=2, sep_token="<|endoftext|>")
 
-    tok = FastTokenizer(tokenizer_json="./data/my_tokenizer/tokenizer.json", sep_token="<|endoftext|>")
+    tok = FastTokenizer(tokenizer_json="./data/owt-my_tokenizer/tokenizer.json", sep_token="<|endoftext|>")
 
-    tok.encode_file(in_path="./data/TinyStoriesV2-GPT4-train.txt", out_path="./data/TinyStoriesV2-GPT4-train.npy")
+    tok.encode_file(in_path="./data/owt-train.txt", out_path="./data/owt-train.npy")
 
-    tok.encode_file(in_path="./data/TinyStoriesV2-GPT4-valid.txt", out_path="./data/TinyStoriesV2-GPT4-valid.npy")
+    tok.encode_file(in_path="./data/owt-valid.txt", out_path="./data/owt-valid.npy")

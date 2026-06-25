@@ -6,13 +6,13 @@ set -e
 # Each line is one flag; comment any out. The array is joined into a single
 # --args="..." string because main(args: str) takes one option, not many.
 ARGS=(
-  --train_file_path "/data/TinyStoriesV2-GPT4-train.npy"
-  --val_file_path "/data/TinyStoriesV2-GPT4-valid.npy"
-  --out_checkpoint_path "/ckpt/run_"
+  --train_file_path "/data/owt-train.npy"
+  --val_file_path "/data/owt-valid.npy"
+  --out_checkpoint_path "/ckpt/owt-run_"
   --wandb
   --wandb_project "cs336-basics"
   --no_wandb_watch
-  --wandb_run_name "B200-full_run-transformer-22M"
+  --wandb_run_name "owt-B200-full_run-transformer-22M"
   --device "cuda"
   --steps 40000
   --val_and_log_every 1000

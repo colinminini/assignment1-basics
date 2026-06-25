@@ -13,7 +13,7 @@ class ModelConfig:
     d_ff: int = 1344
     context_length: int = 256
     theta: int = 10000
-    vocab_size: int = 10000
+    vocab_size: int = 32000
     num_heads: int = 16
     num_blocks : int = 4
     device: str = 'mps'
