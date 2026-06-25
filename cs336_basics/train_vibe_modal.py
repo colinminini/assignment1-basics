@@ -34,3 +34,21 @@ def train(argv: list[str]):
 def main(args: str = ""):
     # `args` is your full CLI string, forwarded to the container untouched.
     train.remote(args.split())
+
+
+@app.local_entrypoint()
+def sweep():
+    ctx, tokens = 256, 10_000_000          # fixed token budget => fair across bs
+    base = ("--device cuda --with_gradient_clipping --wandb --profile --no_wandb_watch --with_torch_compile "
+            "--train_file_path /data/TinyStoriesV2-GPT4-train.npy "
+            "--val_file_path /data/TinyStoriesV2-GPT4-valid.npy "
+            "--out_checkpoint_path /ckpt/run_")
+    grid = []
+    for bs in (16, 32, 64):
+        for lr in (1e-4, 5e-4, 1e-3, 5e-3):
+            steps = tokens // (bs * ctx)
+            grid.append(f"{base} --batch_size {bs} --lr {lr:g} --context_length {ctx} "
+                        f"--steps {steps} --wandb_run_name bs{bs}_lr{lr:g}".split())
+    list(train.map(grid))                    # one GPU container per (bs, lr)
+
+# For the hyperparameters sweep lr/batch_size at fixed training tokens (small run): run `modal run cs336_basics/train_vibe_modal.py::sweep``

@@ -3,24 +3,24 @@ set -euo pipefail
 
 # ===== edit these =====
 DEVICE="cuda"                     # cuda on Modal (was mps locally)
-STEPS=100
+STEPS=40000
 BATCH_SIZE=32
 CONTEXT_LENGTH=""                 # empty = use config default
 LR=1e-3                           # no-op while COSINE_LR=1 (schedule overrides it)
 WEIGHT_DECAY=""                   # empty = use config default
 
 # cosine schedule (used when COSINE_LR=1)
-LR_MIN=1e-3                       # floor; was 1e-3 > LR_MAX, which looked swapped
-LR_MAX=0.5e-2                       # peak
-T_WARMUP=20
-T_C=100
+LR_MIN=1e-4                       # 1/10 of lr_max
+LR_MAX=1e-3                       # max stable lr from hyperparameter sweep
+T_WARMUP=20 # 2% total steps
+T_C=1000 # finish at final step
 
 TRAIN_FILE="/data/TinyStoriesV2-GPT4-train.npy"      # path inside the Modal volume mount
 VAL_FILE="/data/TinyStoriesV2-GPT4-valid.npy"
 CKPT_PREFIX="/ckpt/run_"          # save_checkpoint appends "{step}.pt"
 
 WANDB_PROJECT="cs336-basics"
-WANDB_RUN_NAME="modal_L4-torch_compile-small-transformer"   # empty = wandb auto-name
+WANDB_RUN_NAME="full_run-transformer-22M"   # empty = wandb auto-name
 
 # toggles: 1 = on, 0 = off
 WANDB=1
@@ -60,8 +60,8 @@ if [ "$COSINE_LR" = 1 ]; then
   ARGS+=( --with_cosine_lr --lr_min "$LR_MIN" --lr_max "$LR_MAX" --T_warmup "$T_WARMUP" --T_c "$T_C" )
 fi
 
-if [ "$MIXED_PRECISION" = 1 ]; then ARGS+=( --mixed_precision ); fi
-if [ "$TORCH_COMPILE" = 1 ];   then ARGS+=( --torch_compile ); fi
+if [ "$MIXED_PRECISION" = 1 ]; then ARGS+=( --with_mixed_precision ); fi
+if [ "$TORCH_COMPILE" = 1 ];   then ARGS+=( --with_torch_compile ); fi
 
 echo "modal run cs336_basics/train_vibe_modal.py --args=\"${ARGS[*]}\""
 modal run $DETACH cs336_basics/train_vibe_modal.py --args="${ARGS[*]}"

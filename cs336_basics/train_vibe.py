@@ -69,8 +69,8 @@ def parse_args():
     parser.add_argument("--out_checkpoint_path", type=str, default=None)
     parser.add_argument('--with_cosine_lr', action='store_true')
     parser.add_argument('--with_gradient_clipping', action='store_true')
-    parser.add_argument('--mixed_precision', action='store_true')
-    parser.add_argument('--torch_compile', action='store_true')
+    parser.add_argument('--with_mixed_precision', action='store_true')
+    parser.add_argument('--with_torch_compile', action='store_true')
 
     args = parser.parse_args()
     return args
@@ -218,10 +218,10 @@ if __name__ == "__main__":
 
     device = torch.device(model_cfg.device)
 
-    model_cfg.dtype = torch.bfloat16 if args.mixed_precision else torch.float32
+    model_cfg.dtype = torch.bfloat16 if args.with_mixed_precision else torch.float32
     model = NeuralNets.transformer_lm(**model_cfg.__dict__)
 
-    if args.torch_compile:
+    if args.with_torch_compile:
         model = torch.compile(model)
 
     optimizer = NeuralNets.AdamW(model.parameters(), **optimizer_cfg.__dict__)
