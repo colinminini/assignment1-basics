@@ -44,7 +44,7 @@ def sweep():
             "--val_file_path /data/TinyStoriesV2-GPT4-valid.npy "
             "--out_checkpoint_path /ckpt/run_")
     grid = []
-    for bs in (16, 32, 64):
+    for bs in (8, 16, 32, 64, 128):
         for lr in (1e-4, 5e-4, 1e-3, 5e-3):
             steps = tokens // (bs * ctx)
             grid.append(f"{base} --batch_size {bs} --lr {lr:g} --context_length {ctx} "
