@@ -279,7 +279,6 @@ if __name__ == "__main__":
         
         for step in range(1, training_cfg.steps + 1):
             if device.type == "cuda":
-                torch.cuda.reset_peak_memory_stats(device)
                 torch.cuda.synchronize()
             if device.type == 'mps':
                 torch.mps.synchronize()
@@ -292,6 +291,10 @@ if __name__ == "__main__":
                 context_len=model_cfg.context_length,
                 device=device,
             )
+            if device.type == 'cuda':
+                torch.cuda.synchronize()
+
+            data_loader_time = time.perf_counter() - t0
 
             logits = model(x_batch)
             loss = loss_fn(logits=logits, targets=y_batch)
@@ -319,7 +322,8 @@ if __name__ == "__main__":
                 f"step={step} "
                 f"loss={loss.item():.4f} "
                 f"time={step_time:.3f}s "
-                f"tok/s={tokens_per_step / step_time:.0f}"
+                f"tok/s={tokens_per_step / step_time:.0f} "
+                f"batch_loading_prop={data_loader_time/step_time}"
             )
 
             if run is not None and step % args.wandb_log_every == 0:
@@ -328,6 +332,8 @@ if __name__ == "__main__":
                 "train/perplexity": math.exp(min(loss.item(), 20)),
                 "train/lr": optimizer.param_groups[0]['lr'],
                 "perf/step_time_s": step_time,
+                "perf/batch_loading_time_s": data_loader_time,
+                "perf/data_loading_prop": data_loader_time/step_time,
                 "perf/tokens_per_s": tokens_per_step / step_time,
                 "perf/samples_per_s": training_cfg.batch_size / step_time,
                 "perf/tokens_seen": step * tokens_per_step,

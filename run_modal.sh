@@ -12,7 +12,7 @@ ARGS=(
   --wandb
   --wandb_project "cs336-basics"
   --no_wandb_watch
-  --wandb_run_name "full_run-transformer-22M"
+  --wandb_run_name "B200-full_run-transformer-22M"
   --device "cuda"
   --steps 40000
   --val_and_log_every 1000
