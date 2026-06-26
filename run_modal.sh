@@ -14,14 +14,14 @@ ARGS=(
   --no_wandb_watch
   --wandb_run_name "owt-B200-full_run-transformer-22M"
   --device "cuda"
-  --steps 40000
-  --val_and_log_every 1000
-  --checkpoint_every 5000
+  --steps 900000
+  --val_and_log_every 5000
+  --checkpoint_every 10000
   --batch_size 32
   --lr_min 1e-4
   --lr_max 1e-3
-  --T_warmup 800
-  --T_c 40000
+  --T_warmup 9000
+  --T_c 90000
   --with_gradient_clipping
   --with_torch_compile
   --with_cosine_lr
